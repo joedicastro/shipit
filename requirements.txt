@@ -1,0 +1,5 @@
+blessings==1.5
+distribute==0.6.31
+github3.py==0.5.2
+requests==1.1.0
+urwid==1.1.1
