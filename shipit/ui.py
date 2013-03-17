@@ -38,9 +38,13 @@ class UI(urwid.WidgetWrap):
     Creates a curses interface for the program, providing functions to draw
     all the components of the UI.
     """
+    HEADER_ISSUE_LIST = '{owner}/{repo}'
+    HEADER_ISSUE_DETAIL  = '{owner}/{repo} ─ #{num}: {title}'
 
-    def __init__(self):
-        header = urwid.Text('header')
+    def __init__(self, repo):
+        self.repo = repo
+
+        header = urwid.Text('shipit')
 
         # body
         body = urwid.Text('shipit')
@@ -52,11 +56,19 @@ class UI(urwid.WidgetWrap):
 
     # -- Modes ----------------------------------------------------------------
 
-    def issues(self, repo, issues):
+    def issues(self, issues):
+        header_text = self.HEADER_ISSUE_LIST.format(owner=(str(self.repo.owner)),
+                                                    repo=self.repo.name)
+        self.frame.header.set_text(header_text)
         self.frame.body = issue_list(issues)
         self.frame.set_body(self.frame.body)
 
-    def issue(self, repo, issue):
+    def issue(self, issue):
+        header_text = self.HEADER_ISSUE_DETAIL.format(owner=(str(self.repo.owner)),
+                                                      repo=self.repo.name,
+                                                      num=issue.number,
+                                                      title=issue.title,)
+        self.frame.header.set_text(header_text)
         self.frame.body = issue_detail(issue)
         self.frame.set_body(self.frame.body)
 

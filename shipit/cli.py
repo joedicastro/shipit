@@ -2,12 +2,14 @@ from argparse import ArgumentParser
 
 from github3 import login
 
-from ui import UI
-from core import Shipit
-from secrets import USER, PASSWORD
+from .ui import UI
+from .core import Shipit
+from .secrets import USER, PASSWORD
 
 
 VERSION = "alpha"
+
+USER, REPO = 'alejandrogomez', 'shipit'
 
 
 def read_arguments():
@@ -28,16 +30,16 @@ def read_arguments():
     return args
 
 
-if __name__ == "__main__":
+def main():
     args = read_arguments()
 
-    # create view
-    ui = UI()
+    # fetch repo
+    repo = login(USER, PASSWORD).repository(USER, REPO)
 
-    # create API
-    api = login(USER, PASSWORD)
+    # create view
+    ui = UI(repo)
 
     # create controller
-    shipit = Shipit(ui, api)
+    shipit = Shipit(ui, repo)
 
     shipit.start()
