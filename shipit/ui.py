@@ -136,7 +136,7 @@ class IssueListWidget(urwid.WidgetWrap):
 
 
 def issue_detail(issue):
-    comments = [IssueCommentWidget(comment) for comment in list(issue.iter_comments())]
+    comments = [IssueCommentWidget(issue, comment) for comment in issue.iter_comments()]
     comments.insert(0, ListDetailWidget(issue))
 
     return urwid.ListBox(urwid.SimpleListWalker(comments))
@@ -155,7 +155,8 @@ class IssueCommentWidget(urwid.WidgetWrap):
     HEADER_FORMAT = "{author} commented                                 {time}"
     BODY_FORMAT = "{body}"
 
-    def __init__(self, comment):
+    def __init__(self, issue, comment):
+        self.issue = issue
         self.comment = comment
 
         header_text = self._create_header(comment)
