@@ -51,13 +51,13 @@ def get_remotes():
     raw_remotes = tmp_file.read()
     os.remove(tmp_file.name)
 
+    # Get the GitHub remote strings
+    nonempty_remotes = [r for r in raw_remotes.split('\n') if 'github' in r]
+
     # Process the raw remotes for returning a list of URLs
     def remote_name_and_url(remotestring):
         name_url = remotestring.split(' ')[0]
         return tuple(name_url.split('\t'))
-
-    # Get the GitHub remote strings
-    nonempty_remotes = [r for r in raw_remotes.split('\n') if 'github' in r]
 
     # Extract the url for each remote string
     remotes = dict(remote_name_and_url(r) for r in nonempty_remotes)
@@ -106,7 +106,7 @@ def main():
             # We aren't in a git repo
             exit(ERR_NO_REPO_SPECIFIED)
         elif not remotes:
-            # No github remotes were foun
+            # No github remotes were found
             exit(ERR_UNABLE_TO_FIND_REMOTE)
 
         # Get the user and repo from the `origin` remote
