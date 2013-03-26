@@ -1,72 +1,20 @@
-import os
-import tempfile
-import subprocess
 from argparse import ArgumentParser
 
 from .ui import UI
 from .core import Shipit
 from .auth import login
+from .git import get_remotes, extract_user_and_repo_from_remote
 
 
-ERR_NO_REPO_SPECIFIED = 1
+ERR_NOT_IN_REPO = 1
 ERR_UNABLE_TO_FIND_REMOTE = 2
 ERR_ORIGIN_REMOTE_NOT_FOUND = 3
 
 VERSION = "alpha"
 
 
-def extract_user_and_repo_from_remote(remote_url):
-    # TODO: name slices
-    if remote_url.startswith('git://'):
-        # Git remote
-        user_repo = remote_url.split('/')[3:]
-        user, repo = user_repo[0], user_repo[1][:-4]
-    elif remote_url.startswith('http'):
-        # HTTP[S] remote
-        user_repo = remote_url.split('/')[3:]
-        user, repo = user_repo[0], user_repo[1][:-4]
-    else:
-        # SSH remote
-        user_repo = remote_url.split(':')[1][:-4]
-        user, repo = tuple(user_repo.split('/'))
-
-    return user, repo
-
-
-def get_remotes():
-    """
-    Get a list of the git remote URLs for this repository.
-
-    Return a dictionary of remote names mapped to URL strings if remotes were
-    found.
-
-    Otherwise return ``None``.
-    """
-    tmp_file = tempfile.NamedTemporaryFile(mode='w+', delete=False)
-
-    retcode = subprocess.call(['git', 'remote', '-v'], stdout=tmp_file.file)
-
-    # Store the output of the command and delete temporary file
-    tmp_file.file.seek(0)
-    raw_remotes = tmp_file.read()
-    os.remove(tmp_file.name)
-
-    # Get the GitHub remote strings
-    nonempty_remotes = [r for r in raw_remotes.split('\n') if 'github' in r]
-
-    # Process the raw remotes for returning a list of URLs
-    def remote_name_and_url(remotestring):
-        name_url = remotestring.split(' ')[0]
-        return tuple(name_url.split('\t'))
-
-    # Extract the url for each remote string
-    remotes = dict(remote_name_and_url(r) for r in nonempty_remotes)
-
-    return remotes if retcode == 0 else None
-
-
 def read_arguments():
-    """Read arguments from the command line."""
+    """Read arguments from the command line and return a dictionary."""
 
     parser_title = "shipit"
     parser = ArgumentParser(parser_title)
@@ -104,7 +52,7 @@ def main():
 
         if remotes is None:
             # We aren't in a git repo
-            exit(ERR_NO_REPO_SPECIFIED)
+            exit(ERR_NOT_IN_REPO)
         elif not remotes:
             # No github remotes were found
             exit(ERR_UNABLE_TO_FIND_REMOTE)
