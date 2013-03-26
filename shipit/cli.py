@@ -1,10 +1,9 @@
 from argparse import ArgumentParser
 
-from github3 import login
-
 from .ui import UI
 from .core import Shipit
 from .secrets import USER, PASSWORD
+from .auth import login
 
 
 VERSION = "alpha"
@@ -34,7 +33,7 @@ def main():
     args = read_arguments()
 
     # fetch repo
-    repo = login(USER, PASSWORD).repository(USER, REPO)
+    repo = login().repository(USER, REPO)
 
     # create view
     ui = UI(repo)

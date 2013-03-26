@@ -23,6 +23,13 @@ the issue.
 
 
 def spawn_editor(help_text=None):
+    """
+    Open a editor with a temporary file containing ``help_text``.
+
+    If the exit code is 0 the text from the file will be returned.
+
+    Otherwise, ``None`` is returned.
+    """
     text = '' if help_text is None else help_text
 
     tmp_file = tempfile.NamedTemporaryFile(mode='w+',
