@@ -52,7 +52,7 @@ class UI(urwid.WidgetWrap):
         # footer
         self.frame = urwid.Frame(body, header=header)
 
-        super(UI, self).__init__(self.frame)
+        super().__init__(self.frame)
 
     # -- Modes ----------------------------------------------------------------
 
@@ -93,7 +93,7 @@ class IssueListWidget(urwid.WidgetWrap):
 
         widget = self._build_widget(header_text, body_text)
 
-        super(IssueListWidget, self).__init__(widget)
+        super().__init__(widget)
 
     def _create_header(self, issue):
         """
@@ -164,7 +164,7 @@ class IssueCommentWidget(urwid.WidgetWrap):
 
         widget = self._build_widget(header_text, body_text)
 
-        super(IssueCommentWidget, self).__init__(widget)
+        super().__init__(widget)
 
     def _create_header(self, comment):
         """
@@ -222,7 +222,7 @@ class ListDetailWidget(urwid.WidgetWrap):
 
         widget = self._build_widget(header_text, body_text)
 
-        super(ListDetailWidget, self).__init__(widget)
+        super().__init__(widget)
 
     def _create_header(self, issue):
         """

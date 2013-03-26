@@ -12,6 +12,7 @@ from .config import (
     KEY_NEW_ISSUE, KEY_CLOSE_ISSUE, KEY_BACK, KEY_DETAIL, KEY_EDIT,
     KEY_COMMENT, KEY_QUIT,
 )
+from .ui import time_since
 
 NEW_ISSUE = """
 <!---
@@ -52,9 +53,8 @@ def lines(line_list):
 
 
 def format_comment(comment):
-    # TODO: time since
     author = str(comment.user)
-    time = "TODO"
+    time = time_since(comment.created_at)
     body = unlines(comment.body_text)
     body = ['    '.join(['', line]) for line in body]
     body = lines(body)
@@ -145,7 +145,6 @@ class Shipit():
             issue = self.ui.frame.body.focus.issue
 
             # Inline all the thread comments
-            # TODO: Author
             issue_thread = [format_comment(comment) for comment in issue.iter_comments()]
             issue_thread.insert(0,'\n\n'.join([issue.title, issue.body_text, '']))
             # Make the whole thread a comment
