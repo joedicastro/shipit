@@ -6,6 +6,8 @@ from calendar import timegm
 import urwid
 from x256 import x256
 
+from .config import ISSUE_DIVIDER, COMMENT_DIVIDER
+
 
 def timestamp_from_datetime(datetime):
     return timegm(datetime.utctimetuple())
@@ -32,6 +34,17 @@ def time_since(datetime):
         return "a day ago"
     else:
         return "%d days ago" % (delta / (60 * 60 * 24))
+
+
+def create_label_widget(label):
+    # TODO: sensible foreground color
+    bg = 'h%s' % x256.from_hex(label.color)
+    attr = urwid.AttrSpec('white', bg)
+
+    label_name = ' '.join(['', label.name, ''])
+
+    return urwid.Text((attr, label_name))
+
 
 
 class UI(urwid.WidgetWrap):
@@ -99,10 +112,7 @@ class IssueListWidget(urwid.WidgetWrap):
         header_widget = urwid.Columns([w for w in cls._header_widgets(issue)])
         body_widget = cls._create_body_widget(issue)
 
-        border_attr = 'line'
-        issue_divider = '─'
-
-        divider = urwid.AttrMap(urwid.Divider(issue_divider), border_attr, 'focus')
+        divider = urwid.AttrMap(urwid.Divider(ISSUE_DIVIDER), 'line', 'focus')
         widget = urwid.Pile([header_widget, body_widget, divider], focus_item=2)
 
         return widget
@@ -130,8 +140,7 @@ class IssueListWidget(urwid.WidgetWrap):
 
     @classmethod
     def _create_label_widgets(cls, issue):
-        label_widgets = [cls._create_label_widget(label) for label
-                                                         in issue.labels]
+        label_widgets = [create_label_widget(label) for label in issue.labels]
         return urwid.Columns(label_widgets)
 
     @staticmethod
@@ -182,7 +191,6 @@ class IssueCommentWidget(urwid.WidgetWrap):
 
     # {user} commented                  {time}
     # {body}
-    # TODO: labels
     HEADER_FORMAT = "{author} commented                                 {time}"
     BODY_FORMAT = "{body}"
 
@@ -220,10 +228,7 @@ class IssueCommentWidget(urwid.WidgetWrap):
         header = urwid.AttrMap(urwid.Text(header_text), 'header')
         body = urwid.Padding(urwid.AttrMap(urwid.Text(body_text), 'body'), left=1, right=1)
 
-        border_attr = 'line'
-        comment_divider = '─'
-
-        divider = urwid.AttrMap(urwid.Divider(comment_divider), border_attr, 'focus')
+        divider = urwid.AttrMap(urwid.Divider(COMMENT_DIVIDER), 'line', 'focus')
         widget = urwid.Pile([header, body, divider], focus_item=2)
 
         return widget
@@ -237,8 +242,11 @@ class IssueCommentWidget(urwid.WidgetWrap):
 
 class ListDetailWidget(urwid.WidgetWrap):
     """
+    A widget for rendering an issue in detail . It includes all the information
+    regarding the issue.
     """
     # {user} opened this issue {time}
+    # TODO: labels
     # {title}
     # TODO{assignee}                        {milestone}
     # {body}
@@ -249,42 +257,42 @@ class ListDetailWidget(urwid.WidgetWrap):
 
     def __init__(self, issue):
         self.issue = issue
-
-        header_text = self._create_header(issue)
-        body_text = self._create_body(issue)
-
-        widget = self._build_widget(header_text, body_text)
-
+        widget = self._build_widget(issue)
         super().__init__(widget)
 
-    def _create_header(self, issue):
-        """
-        Return the header text for the issue associated with this widget.
-        """
-        return self.HEADER_FORMAT.format(
+    @classmethod
+    def _build_widget(cls, issue):
+        """Return a widget for the ``issue``."""
+        header_widget = cls._create_header_widget(issue)
+        labels = urwid.Columns([create_label_widget(label) for label in issue.labels])
+
+        header = urwid.Columns([header_widget, labels])
+        body = cls._create_body_widget(issue)
+
+        divider = urwid.AttrMap(urwid.Divider(ISSUE_DIVIDER), 'line', 'focus')
+
+        widget = urwid.Pile([header, body, divider], focus_item=2)
+
+        return widget
+
+    @classmethod
+    def _create_header_widget(cls, issue):
+        text = cls.HEADER_FORMAT.format(
             author=str(issue.user),
             time=time_since(issue.created_at),
             title=issue.title,
         )
+        widget = urwid.Text(text)
+        return urwid.AttrMap(widget, 'header')
 
-    def _create_body(self, issue):
-        return self.BODY_FORMAT.format(
+    @classmethod
+    def _create_body_widget(cls, issue):
+        text = cls.BODY_FORMAT.format(
             body=issue.body_text,
         )
-
-    def _build_widget(self, header_text, body_text):
-        """Return the wrapped widget."""
-
-        header = urwid.AttrMap(urwid.Text(header_text), 'header')
-        body = urwid.Padding(urwid.AttrMap(urwid.Text(body_text), 'body'), left=1, right=1)
-
-        border_attr = 'line'
-        issue_divider = '─'
-
-        divider = urwid.AttrMap(urwid.Divider(issue_divider), border_attr, 'focus')
-        widget = urwid.Pile([header, body, divider], focus_item=2)
-
-        return widget
+        widget = urwid.Text(text)
+        attr_widget = urwid.AttrMap(widget, 'body')
+        return urwid.Padding(attr_widget, left=1, right=1)
 
     def selectable(self):
         return True

@@ -129,10 +129,15 @@ class Shipit():
                 issue = self.ui.frame.body.focus.issue
                 self.issue_detail(issue)
         elif key == KEY_EDIT:
+            # TODO: not the issue but what it's focused, could be a comment!
             issue = self.ui.frame.body.focus.issue
 
             title_and_body = '\n'.join([issue.title, issue.body_text])
             issue_text = spawn_editor(title_and_body)
+
+            if issue_text is None:
+                # TODO: cancelled
+                return
 
             contents = unlines(issue_text)
             title, *body = contents

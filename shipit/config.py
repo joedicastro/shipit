@@ -6,6 +6,8 @@ KEY_EDIT = 'e'
 KEY_COMMENT = 'c'
 KEY_QUIT = 'q'
 
+ISSUE_DIVIDER = '─'
+COMMENT_DIVIDER = '─'
 
 PALETTE = [
     ('header', 'light blue', ''),
