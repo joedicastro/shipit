@@ -11,11 +11,10 @@ COMMENT_DIVIDER = '─'
 
 PALETTE = [
     ('header', 'light blue', ''),
-    ('username', 'light red', ''),
     ('body', 'white', ''),
+    ('username', 'dark cyan', ''),
     ('focus', 'light red', ''),
     ('line', 'black', ''),
-    ('unread', 'dark red', ''),
-    ('read', 'dark blue', ''),
-    ('favorited', 'yellow', ''),
+    ('checkbox', 'yellow', ''),
+    ('legend', 'white,underline', ''),
 ]

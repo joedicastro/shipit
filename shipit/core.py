@@ -118,19 +118,23 @@ class Shipit():
                 if issue:
                     self.issue_detail(issue)
         elif key == KEY_CLOSE_ISSUE:
-            issue = self.ui.frame.body.focus.issue
-            issue.close()
+            issue = self.ui.get_issue()
+            if issue:
+                issue.close()
             self.issue_list()
         elif key == KEY_BACK:
             if self.mode is self.ISSUE_DETAIL:
                 self.issue_list()
         elif key == KEY_DETAIL:
             if self.mode is self.ISSUE_LIST:
-                issue = self.ui.frame.body.focus.issue
-                self.issue_detail(issue)
+                issue = self.ui.get_issue()
+                if issue:
+                    self.issue_detail(issue)
         elif key == KEY_EDIT:
             # TODO: not the issue but what it's focused, could be a comment!
-            issue = self.ui.frame.body.focus.issue
+            issue = self.ui.get_issue()
+            if issue is None:
+                return
 
             title_and_body = '\n'.join([issue.title, issue.body_text])
             issue_text = spawn_editor(title_and_body)
@@ -154,7 +158,9 @@ class Shipit():
             elif self.mode is self.ISSUE_DETAIL:
                 self.issue_detail(issue)
         elif key == KEY_COMMENT:
-            issue = self.ui.frame.body.focus.issue
+            issue = self.ui.get_issue()
+            if issue is None:
+                return
 
             # Inline all the thread comments
             issue_thread = [format_comment(comment) for comment in issue.iter_comments()]

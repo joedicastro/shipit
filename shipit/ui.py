@@ -36,10 +36,14 @@ def time_since(datetime):
         return "%d days ago" % (delta / (60 * 60 * 24))
 
 
-def create_label_widget(label):
+def create_label_attr(label):
     # TODO: sensible foreground color
     bg = 'h%s' % x256.from_hex(label.color)
-    attr = urwid.AttrSpec('white', bg)
+    return urwid.AttrSpec('black', bg)
+
+
+def create_label_widget(label):
+    attr = create_label_attr(label)
 
     label_name = ' '.join(['', label.name, ''])
 
@@ -68,13 +72,27 @@ class UI(urwid.WidgetWrap):
 
         super().__init__(self.frame)
 
+    # -- API ------------------------------------------------------------------
+
+    def get_issue(self):
+        """Return a issue if it's focused, otherwise return ``None``."""
+        body = self.frame.body
+
+        if isinstance(body, urwid.Columns):
+            # Issue list
+            focused = body.focus
+            return focused.focus.issue
+        else:
+            # Issue detail
+            return body.focus.issue
+
     # -- Modes ----------------------------------------------------------------
 
     def issues(self, issues):
         header_text = self.HEADER_ISSUE_LIST.format(owner=(str(self.repo.owner)),
                                                     repo=self.repo.name)
         self.frame.header.set_text(header_text)
-        self.frame.body = issue_list(issues)
+        self.frame.body = issue_list(self.repo, issues)
         self.frame.set_body(self.frame.body)
 
     def issue(self, issue):
@@ -96,6 +114,7 @@ class IssueListWidget(urwid.WidgetWrap):
     # num - Title [tags]
     # by author - timeago  --- num comments
     # --
+    # TODO: attributes
     HEADER_FORMAT = "#{num} ─ {title}       "
     BODY_FORMAT = "by {author}  {time}      {comments}"
 
@@ -119,7 +138,6 @@ class IssueListWidget(urwid.WidgetWrap):
 
     @classmethod
     def _header_widgets(cls, issue):
-        # TODO: refine this
         # Header widget
         yield cls._create_header_widget(issue)
         # Labels
@@ -181,9 +199,72 @@ def issue_detail(issue):
     return urwid.ListBox(urwid.SimpleListWalker(comments))
 
 
-def issue_list(issues):
+def issue_list(repo, issues):
     issue_widgets = [IssueListWidget(issue) for issue in issues]
-    return urwid.ListBox(urwid.SimpleListWalker(issue_widgets))
+    issues = urwid.ListBox(urwid.SimpleListWalker(issue_widgets))
+    controls = Controls(repo, issues)
+    return urwid.Columns([issues, controls])
+
+
+class Controls(urwid.ListBox):
+    # TODO: Milestone
+    # TODO: Assigned to you, Created by you
+    # TODO: Open/Closed/PR
+    def __init__(self, repo, issues):
+        self.repo = repo
+        self.issues = issues
+
+        widgets = self._build_widgets()
+
+        super().__init__(urwid.SimpleListWalker(widgets))
+
+    def _build_widgets(self):
+        br = Legend('')
+        controls = []
+        # Open/Closed/Pull Request
+        choices = [('Open', True), ('Closed', False), ('Pull Request', True)]
+        for name, state in choices:
+            widget = CheckBoxWrap(urwid.Text(name))
+            widget.checkbox.set_state(state)
+            controls.append(widget)
+        controls.append(br)
+        # Labels
+        labels = [LabelWidget(label) for label in self.repo.iter_labels()]
+        labels.insert(0, Legend('Filter by label\n'))
+
+        controls.extend(labels)
+        controls.append(br)
+
+        return controls
+
+    def get_focused(self):
+        import ipdb; ipdb.set_trace()  # XXX BREAKPOINT
+        pass
+
+
+class Legend(urwid.Text):
+    def __init__(self, text):
+        super().__init__(('legend', text))
+
+    def selectable(self):
+        return False
+
+class CheckBoxWrap(urwid.WidgetWrap):
+    # TODO: signals
+    def __init__(self, text_widget):
+        checkbox = urwid.AttrMap(urwid.CheckBox(' '), 'checkbox', 'focus')
+        widget = urwid.Columns([(5, checkbox), text_widget])
+        self.checkbox = checkbox.base_widget
+        super().__init__(widget)
+
+
+class LabelWidget(urwid.WidgetWrap):
+    """Represent a label."""
+    def __init__(self, label):
+        checkbox = urwid.AttrMap(urwid.CheckBox(' '), 'checkbox', 'focus')
+        label_widget = create_label_widget(label)
+        widget = urwid.Columns([(5, checkbox), label_widget])
+        super().__init__(widget)
 
 
 class IssueCommentWidget(urwid.WidgetWrap):
