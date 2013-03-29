@@ -16,6 +16,7 @@ from .config import (
 from .ui import time_since
 from .events import on
 from .models import is_issue, is_pull_request, is_open, is_closed
+from .func import lines, unlines, both
 
 NEW_ISSUE = """
 <!---
@@ -55,34 +56,6 @@ def spawn_editor(help_text=None):
     return contents
 
 
-def show_diff(pr):
-    raw_diff = bytes.decode(pr.diff())[2:]
-    diff = raw_diff[:-1]
-
-    tmp_file = tempfile.NamedTemporaryFile(mode='w+',
-                                           suffix='.diff',
-                                           delete=False)
-    tmp_file.write(diff)
-    tmp_file.close()
-
-    fname = tmp_file.name
-
-    pager = os.getenv('PAGER', 'less')
-    args = pager.split()
-    args.append(fname)
-
-    subprocess.call(args)
-    os.remove(fname)
-
-
-def unlines(text):
-    return text.split('\n')
-
-
-def lines(line_list):
-    return '\n'.join(line_list)
-
-
 def format_comment(comment):
     author = str(comment.user)
     time = time_since(comment.created_at)
@@ -101,10 +74,6 @@ def item_index(issues, item):
             return index
     else:
         return -1
-
-
-def both(pred1, pred2):
-    return lambda x: pred1(x) and pred2(x)
 
 
 def step(first, last):
@@ -152,7 +121,7 @@ class IssuesAndPullRequests(MonitoredList):
         self._prs.extend([i for i in self.repo.iter_pulls()])
 
     def fetch_open_issues(self):
-        self._issues.extend([i for i in self.repo.iter_issues()])
+        self._issues.extend([i for i in self.repo.iter_issues() if not i.pull_request])
 
     def fetch_closed_issues(self):
         self._issues.extend([i for i in self.repo.iter_issues(state='closed')])
@@ -173,7 +142,7 @@ class IssuesAndPullRequests(MonitoredList):
 
     def _append_open_pull_requests(self, future=None):
         # FIXME: __eq__ is coming
-        for pr in filter(is_open, self._prs):
+        for pr in self._prs:
             index = item_index(self, pr)
             if index == -1:
                 self.append(pr)
@@ -183,6 +152,7 @@ class Shipit():
     ISSUE_LIST = 0
     ISSUE_DETAIL = 1
     PR_DETAIL = 2
+    PR_DIFF = 3
 
     def __init__(self, ui, repo):
         self.ui = ui
@@ -191,6 +161,7 @@ class Shipit():
         self.issues_and_prs = IssuesAndPullRequests(self.repo)
         self.issues_and_prs.set_modified_callback(self.on_modify_issues_and_prs)
         self.issues_and_prs.show_open_issues()
+        self.issues_and_prs.show_open_pull_requests()
 
         # Event handlers
         on("show_open_issues", self.issues_and_prs.show_open_issues)
@@ -226,6 +197,10 @@ class Shipit():
         self.mode = self.PR_DETAIL
         self.ui.pull_request(pr)
 
+    def diff(self, pr):
+        self.mode = self.PR_DIFF
+        self.ui.diff(pr)
+
     def handle_keypress(self, key):
         #  R: reopen
         #  D: delete
@@ -257,7 +232,10 @@ class Shipit():
                     # FIXME: comparison is coming, until then...
                     self.issues_and_prs.pop(i)
         elif key == KEY_BACK:
-            if self.mode in [self.ISSUE_DETAIL, self.PR_DETAIL]:
+            if self.mode is self.PR_DIFF:
+                pr = self.ui.get_focused_item()
+                self.pull_request_detail(pr)
+            elif self.mode in [self.ISSUE_DETAIL, self.PR_DETAIL]:
                 self.issue_list()
         elif key == KEY_DETAIL:
             if self.mode is self.ISSUE_LIST:
@@ -325,4 +303,4 @@ class Shipit():
         elif key == KEY_DIFF:
             if self.mode is self.PR_DETAIL:
                 pr = self.ui.get_focused_item()
-                show_diff(pr)
+                self.diff(pr)

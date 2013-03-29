@@ -8,7 +8,8 @@ from x256 import x256
 
 from .config import ISSUE_DIVIDER, COMMENT_DIVIDER
 from .events import trigger
-from .models import is_issue, is_pull_request
+from .models import is_issue, is_pull_request, is_open
+from .func import unlines
 
 def issue_title(issue):
     return urwid.Text([("title", issue.title)])
@@ -18,15 +19,22 @@ def issue_comments(issue):
     if not issue.comments:
         return urwid.Text("")
 
-    return urwid.Text("%s comments" % issue.comments)
+    if issue.comments == 1:
+        text = "1 comment"
+    else:
+        text = "%s comments" % issue.comments
+
+    return urwid.Text(("text", text))
 
 
 def issue_author(issue):
-    return urwid.Text([("username", str(issue.user)), " opened this issue"])
+    return urwid.Text([("username", str(issue.user)),
+                       ("text", " opened this issue")])
 
 
 def issue_time(issue):
-    return urwid.Text([("time", time_since(issue.created_at))])
+    return urwid.Text([("time", time_since(issue.created_at))],
+                      align='right',)
 
 
 def issue_milestone(issue):
@@ -34,7 +42,8 @@ def issue_milestone(issue):
         return urwid.Text("")
 
     text = "Milestone: %s" % issue.milestone.title
-    return  urwid.Text([("milestone", text)])
+    return  urwid.Text([("milestone", text)],
+                       align='right',)
 
 
 def issue_assignee(issue):
@@ -44,6 +53,57 @@ def issue_assignee(issue):
     username = "%s" % str(issue.assignee)
 
     return urwid.Text([("username", username),  ("assignee", " is assigned")])
+
+
+def pr_author(pr):
+    return urwid.Text([("username", str(pr.user)),
+                       ("text", " opened this pull request")])
+
+
+def pr_comments(pr):
+    comments = len([_ for _ in pr.iter_comments()])
+
+    if not comments:
+        return None
+
+    if comments == 1:
+        text = "1 comment"
+    else:
+        text = "%s comments" % comments
+
+    return urwid.Text(("text", text))
+
+
+def pr_commits(pr):
+    commits = len([_ for _ in pr.iter_commits()])
+    if commits == 1:
+        text = "1 commit"
+    else:
+        text = "%s commits" % commits
+
+    return urwid.Text(("text", text))
+
+
+def pr_additions(pr):
+    additions = sum([file.additions for file in pr.iter_files()])
+    return urwid.Text([("green_text", "+"), ("text", " %s additions" % additions)])
+
+
+def pr_deletions(pr):
+    deletions = sum([file.deletions for file in pr.iter_files()])
+    return urwid.Text([("red_text", "-"), ("text", " %s deletions" % deletions)])
+
+
+def pr_diff(pr):
+    raw_diff = bytes.decode(pr.diff())[2:]
+    return raw_diff[:-1]
+
+
+
+pr_title = issue_title
+#pr_assignee = issue_assignee
+#pr_milestone = issue_assignee
+pr_time = issue_time
 
 
 def trigger_show_open_issues():
@@ -111,9 +171,19 @@ def create_label_widget(label):
     return urwid.Text((attr, label_name))
 
 
+def box(widget):
+    return urwid.AttrMap(urwid.LineBox(widget), "line", "focus")
+
+
+def make_divider():
+    return urwid.AttrMap(urwid.Divider(ISSUE_DIVIDER), "divider")
+
+
+def make_vertical_divider():
+    return urwid.Padding(urwid.SolidFill("·"), left=1, right=1)
+
 
 class UI(urwid.WidgetWrap):
-    # TODO: cache views
     """
     Creates a curses interface for the program, providing functions to draw
     all the components of the UI.
@@ -145,20 +215,20 @@ class UI(urwid.WidgetWrap):
         """
         body = self.frame.body
 
-        if isinstance(body, urwid.Columns):
-            # Issue list
-            focused = body.focus.focus.issue
-        elif hasattr(body.focus, "issue"):
-            # Issue detail
-            focused = body.focus.issue
+        widget = body.focus.focus
+
+        if isinstance(body, Diff):
+            focused = body.pr
+        elif not widget:
+            focused = None
+        elif isinstance(widget, PRDetailWidget):
+            focused = widget.pr
         else:
-            # PR detail
-            focused = body.focus.pr
+            focused = widget.issue if hasattr(widget, 'issue') else None
 
         issue_or_pr = is_issue(focused) or is_pull_request(focused)
 
         return focused if issue_or_pr else None
-
 
     def get_issue(self):
         """Return a issue if it"s focused, otherwise return ``None``."""
@@ -181,7 +251,7 @@ class UI(urwid.WidgetWrap):
         else:
             body = ListWidget(self.repo, issues_and_pulls)
             self.views["issues"] = body
-            self.frame.body = body
+            #self.frame.body = body
 
         self.frame.set_body(body)
 
@@ -191,8 +261,8 @@ class UI(urwid.WidgetWrap):
                                                       num=issue.number,
                                                       title=issue.title,)
         self.frame.header.set_text(header_text)
-        self.frame.body = issue_detail(issue)
-        self.frame.set_body(self.frame.body)
+        body = issue_detail(issue)
+        self.frame.set_body(body)
 
     def pull_request(self, pr):
         """Render a detail view for the `pr` pull request."""
@@ -202,6 +272,10 @@ class UI(urwid.WidgetWrap):
                                                    title=pr.title,)
         self.frame.header.set_text(header_text)
         self.frame.body = pull_request_detail(pr)
+        self.frame.set_body(self.frame.body)
+
+    def diff(self, pr):
+        self.frame.body = Diff(pr)
         self.frame.set_body(self.frame.body)
 
 
@@ -221,40 +295,33 @@ class IssueListWidget(urwid.WidgetWrap):
         super().__init__(widget)
 
     @classmethod
-    def _build_widget(cls, issue, include_labels=True, include_comments=True):
+    def _build_widget(cls, issue):
         """Return a widget for the ``issue``."""
-        title = issue_title(issue)
+        number = urwid.Text([("number", "#%s" % issue.number)])
 
-        if include_labels:
-            labels = cls._create_label_widgets(issue)
-            title_labels = urwid.Columns([(60, title), labels])
-        else:
-            title_labels = title
+        title = issue_title(issue)
+        labels = cls._create_label_widgets(issue)
+        title_labels = urwid.Columns([(60, title), labels])
 
         author = issue_author(issue)
         time = issue_time(issue)
         author_time = urwid.Columns([author, time])
 
-        assignee = issue_assignee(issue)
-        milestone = issue_milestone(issue)
-        assignee_milestone = urwid.Columns([assignee, milestone])
+        widget_list = [title_labels, author_time]
 
-        if include_comments:
-            comments = issue_comments(issue)
-        else:
-            comments = urwid.Text("")
+        if issue.assignee or issue.milestone:
+            assignee = issue_assignee(issue)
+            milestone = issue_milestone(issue)
+            assignee_milestone = urwid.Columns([assignee, milestone])
+            widget_list.append(assignee_milestone)
 
-        divider = urwid.AttrMap(urwid.Divider(ISSUE_DIVIDER), "line", "focus")
+        if issue.comments:
+            widget_list.append(issue_comments(issue))
 
-        widget_list = [title_labels,
-                       author_time,
-                       assignee_milestone,
-                       comments,
-                       divider,]
-        last = len(widget_list) - 1
-        widget = urwid.Pile(widget_list, focus_item=last)
+        pile = urwid.Pile(widget_list)
+        info = urwid.Columns([(5, number), pile])
 
-        return widget
+        return box(info)
 
     @classmethod
     def _create_label_widgets(cls, issue):
@@ -273,43 +340,87 @@ class PRListWidget(IssueListWidget):
     Widget containing a Pull Requests's basic information, meant to be rendered
     on a list.
     """
-    # --
-    # num - Title
-    # by author - timeago  -- (code attached) num comments
-    # --
-    # TODO: attributes
-    BODY_FORMAT = "by {author}  {time}    code attached"
-
     @classmethod
-    def _header_widgets(cls, issue):
-        # Header widget
-        yield cls._create_header_widget(issue)
+    def _build_widget(cls, pr):
+        """Return a widget for the ``pr``."""
+        number = urwid.Text([("pull", "PR\n#%s" % pr.number)])
 
-    @classmethod
-    def _create_body_widget(cls, pr):
-        body_text = cls.BODY_FORMAT.format(
-            author=str(pr.user),
-            time=time_since(pr.created_at),
-        )
+        title = pr_title(pr)
 
-        body = urwid.AttrMap(urwid.Text(body_text), "body")
+        author = pr_author(pr)
+        time = pr_time(pr)
+        author_time = urwid.Columns([author, time])
 
-        return urwid.Padding(body, left=1, right=1)
+        widget_list = [title,
+                       author_time,]
+
+        comments = pr_comments(pr)
+        if comments:
+            widget_list.append(comments)
+
+        pile = urwid.Pile(widget_list)
+        widget = urwid.Columns([(5, number), pile])
+
+        return box(widget)
 
 
 def issue_detail(issue):
     comments = [IssueCommentWidget(issue, comment) for comment in issue.iter_comments()]
     comments.insert(0, IssueDetailWidget(issue))
 
-    return urwid.ListBox(urwid.SimpleListWalker(comments))
+    thread = urwid.ListBox(urwid.SimpleListWalker(comments))
+
+    info_widgets = []
+    if is_open(issue):
+        state_indicator = urwid.Text(("green", " Open "), align='center')
+    else:
+        state_indicator = urwid.Text(("red", " Closed "), align='center')
+
+    info_widgets.append(state_indicator)
+    info_widgets.append(issue_comments(issue))
+
+    label_widgets = [make_divider(), Legend("Labels"), urwid.Text("")]
+    label_widgets.extend([create_label_widget(label) for label in issue.labels])
+
+    info_widgets.extend(label_widgets)
+
+    info = urwid.ListBox(urwid.SimpleListWalker(info_widgets))
+    vertical_divider = make_vertical_divider()
+
+    widget = urwid.Columns([(110, thread), (3, vertical_divider), info])
+
+    return widget
 
 
 def pull_request_detail(pr):
     comments = [PRCommentWidget(pr, comment) for comment in pr.iter_comments()]
     comments.insert(0, PRDetailWidget(pr))
 
-    return urwid.ListBox(urwid.SimpleListWalker(comments))
+    thread = urwid.ListBox(urwid.SimpleListWalker(comments))
 
+    info_widgets = []
+    if is_open(pr):
+        state_indicator = urwid.Text(("green", " Open "), align='center')
+    else:
+        state_indicator = urwid.Text(("red", " Closed "), align='center')
+
+    info_widgets.append(state_indicator)
+    info_widgets.append(pr_commits(pr))
+
+    additions = pr_additions(pr)
+    deletions = pr_deletions(pr)
+
+    info_widgets.append(additions)
+    info_widgets.append(deletions)
+
+    # TODO: don't allow selection
+    info = urwid.ListBox(urwid.SimpleListWalker(info_widgets))
+
+    vertical_divider = make_vertical_divider()
+
+    widget = urwid.Columns([(110, thread), (3, vertical_divider), info])
+
+    return widget
 
 
 def issue_list(issues):
@@ -329,9 +440,12 @@ class ListWidget(urwid.Columns):
         issue_widgets = [w for w in issue_list(items)]
 
         self.issues = urwid.ListBox(urwid.SimpleListWalker(issue_widgets))
+        vertical_divider = make_vertical_divider()
         self.controls = Controls(repo, items)
 
-        super().__init__([(90, self.issues), (1, urwid.SolidFill("│")), self.controls])
+        super().__init__([(90, self.issues),
+                          (3, vertical_divider),
+                          self.controls])
 
     def reset_list(self, items):
         widgets = [w for w in issue_list(items)]
@@ -380,6 +494,7 @@ class Legend(urwid.Text):
     def selectable(self):
         return False
 
+
 class CheckBoxWrap(urwid.WidgetWrap):
     # TODO: signals
     def __init__(self, text_widget, state=False, check=None, uncheck=None):
@@ -418,7 +533,7 @@ class ClosedIssuesCheckbox(CheckBoxWrap):
 
 
 class PullRequestsCheckbox(CheckBoxWrap):
-    def __init__(self, checked=False):
+    def __init__(self, checked=True):
         super().__init__(urwid.Text("Pull requests"),
                          state=checked,
                          check=trigger_show_open_pull_requests,
@@ -438,17 +553,19 @@ class IssueDetailWidget(urwid.WidgetWrap):
     """
     A widget for rendering an issue in detail . It includes all the information
     regarding the issue.
+
+    Includes the following information:
+
+         ---------------------------------
+        |{title}                          |
+        |{user} opened this issue {time}  |
+        |{assignee}           {milestone} |
+        |{participants}                   |
+        |---------------------------------|
+        |{body}                           |
+         ---------------------------------
     """
-    # {user} opened this issue {time} {closed?}
-    # {title}
-    # {assignee}     {milestone}
-    # {body}
-    # TODO{participants}
-    HEADER_FORMAT = """
-{author} opened this issue {time}
-{title}
-{assignee}{milestone}
-    """
+    # TODO: participants
     BODY_FORMAT = "{body}"
 
     def __init__(self, issue):
@@ -460,13 +577,14 @@ class IssueDetailWidget(urwid.WidgetWrap):
     def _build_widget(cls, issue):
         """Return a widget for the ``issue``."""
         header = cls._create_header_widget(issue)
-        body = cls._create_body_widget(issue)
+        if issue.body_text:
+            body = cls._create_body_widget(issue)
+            divider = make_divider()
+            widget = urwid.Pile([header, divider, body])
+        else:
+            widget = header
 
-        divider = urwid.AttrMap(urwid.Divider(ISSUE_DIVIDER), "line", "focus")
-
-        widget = urwid.Pile([header, body, divider], focus_item=2)
-
-        return widget
+        return box(widget)
 
     @classmethod
     def _create_header_widget(cls, issue):
@@ -503,51 +621,50 @@ class IssueDetailWidget(urwid.WidgetWrap):
 
 
 class IssueCommentWidget(urwid.WidgetWrap):
-    # Comment
-
-    # {user} commented                  {time}
-    # {body}
-    HEADER_FORMAT = "{author} commented                                 {time}"
-    BODY_FORMAT = "{body}"
-
     def __init__(self, issue, comment):
         self.issue = issue
         self.comment = comment
 
-        header_text = self._create_header(comment)
-        body_text = self._create_body(comment)
-
-        widget = self._build_widget(header_text, body_text)
+        widget = self._build_widget(issue, comment)
 
         super().__init__(widget)
+
+    @classmethod
+    def _build_widget(cls, issue, comment):
+        """Return the wrapped widget."""
+        header = cls._create_header(comment)
+        body = cls._create_body(comment)
+
+        divider = make_divider()
+
+        widget = urwid.Pile([header, divider, body])
+
+        return box(widget)
 
     @classmethod
     def _create_header(cls, comment):
         """
         Return the header text for the comment associated with this widget.
         """
-        return cls.HEADER_FORMAT.format(
-            author=str(comment.user),
-            time=time_since(comment.created_at),
-        )
+        author = cls.comment_author(comment)
+        time = cls.comment_time(comment)
+
+        return urwid.Columns([author, time])
 
     @classmethod
     def _create_body(cls, comment):
-        return cls.BODY_FORMAT.format(
-            body=comment.body_text,
-        )
+        widget = urwid.Text(("body", comment.body_text))
+        return urwid.Padding(widget, left=2, right=2)
 
     @staticmethod
-    def _build_widget(header_text, body_text):
-        """Return the wrapped widget."""
+    def comment_author(comment):
+        return urwid.Text([("username", str(comment.user)),
+                           ("text", " commented")],)
 
-        header = urwid.AttrMap(urwid.Text(header_text), "header")
-        body = urwid.Padding(urwid.AttrMap(urwid.Text(body_text), "body"), left=1, right=1)
-
-        divider = urwid.AttrMap(urwid.Divider(COMMENT_DIVIDER), "line", "focus")
-        widget = urwid.Pile([header, body, divider], focus_item=2)
-
-        return widget
+    @staticmethod
+    def comment_time(comment):
+        return urwid.Text(("time", time_since(comment.created_at)),
+                          align='right',)
 
     def selectable(self):
         return True
@@ -557,17 +674,21 @@ class IssueCommentWidget(urwid.WidgetWrap):
 
 
 class PRDetailWidget(urwid.WidgetWrap):
-    # {user} opened this pull request {time}
-    # {title}
-    # TODO{assignee}                        {milestone}
-    # {body}
-    # TODO: merge state
-    # TODO{participants}
-    def __init__(self):
-        super().__init__("PULL REQUEST")
-    HEADER_FORMAT = "{author} opened this pull request {time}\n{title}"
-    BODY_FORMAT = "{body}"
+    """
+    Includes the following information:
 
+         ---------------------------------
+        |{title}                          |
+        |{user} opened this pr     {time} |
+        |{assignee}           {milestone} |
+        |{participants}                   |
+        |---------------------------------|
+        |{body}                           |
+         ---------------------------------
+        |{merge_status}                   |
+         ---------------------------------
+    """
+    # TODO: participants
     def __init__(self, pr):
         self.pr = pr
         widget = self._build_widget(pr)
@@ -576,33 +697,39 @@ class PRDetailWidget(urwid.WidgetWrap):
     @classmethod
     def _build_widget(cls, pr):
         """Return a widget for the ``pr``."""
-        header = cls._create_header_widget(pr)
+        title = pr_title(pr)
+
+        author = pr_author(pr)
+        time = pr_time(pr)
+        author_time = urwid.Columns([author, time])
+
+        widget_list = [title, author_time]
+
+        #assignee = pr_assignee(pr)
+        #milestone = pr_milestone(pr)
+        #assignee_milestone = urwid.Columns([assignee, milestone])
+        divider = make_divider()
+
         body = cls._create_body_widget(pr)
 
-        divider = urwid.AttrMap(urwid.Divider(ISSUE_DIVIDER), "line", "focus")
+        if pr.body:
+            widget_list.extend([divider, body])
 
-        widget = urwid.Pile([header, body, divider], focus_item=2)
+        # FIXME: is this always false? maybe a bug in the library
+        if pr.mergeable:
+            mergeable = urwid.Text(("green", "Can be automatically merged"))
+        else:
+            mergeable = urwid.Text(("red", "Can't be automatically merged"))
+        widget_list.extend([divider, mergeable])
 
-        return widget
+        widget = urwid.Pile(widget_list)
 
-    @classmethod
-    def _create_header_widget(cls, pr):
-        text = cls.HEADER_FORMAT.format(
-            author=str(pr.user),
-            time=time_since(pr.created_at),
-            title=pr.title,
-        )
-        widget = urwid.Text(text)
-        return urwid.AttrMap(widget, "header")
+        return box(widget)
 
     @classmethod
     def _create_body_widget(cls, pr):
-        text = cls.BODY_FORMAT.format(
-            body=pr.body,
-        )
-        widget = urwid.Text(text)
-        attr_widget = urwid.AttrMap(widget, "body")
-        return urwid.Padding(attr_widget, left=1, right=1)
+        widget = urwid.Text(["\n", ("body", pr.body_text)])
+        return urwid.Padding(widget, left=2, right=2)
 
     def selectable(self):
         return True
@@ -630,3 +757,30 @@ class PRCommentWidget(IssueCommentWidget):
             body=comment.body,
         )
 
+
+class Diff(urwid.ListBox):
+    def __init__(self, pr):
+        self.pr = pr
+        self.diff = pr_diff(pr)
+        super().__init__(urwid.SimpleListWalker([l for l in
+                                                 self._build_lines(self.diff)]))
+
+    @staticmethod
+    def _build_lines(diff):
+        for line in unlines(diff):
+            if line.startswith("ff"):
+                yield urwid.Text(("text", line))
+            elif line.startswith("index"):
+                yield urwid.Text(("text", line))
+            elif line.startswith("@@"):
+                yield urwid.Text(("cyan_text", line))
+            elif line.startswith("+++"):
+                yield urwid.Text(("text", line))
+            elif line.startswith("+"):
+                yield urwid.Text(("green_text", line))
+            elif line.startswith("---"):
+                yield urwid.Text(("text", line))
+            elif line.startswith("-"):
+                yield urwid.Text(("red_text", line))
+            else:
+                yield urwid.Text(("code", line))
