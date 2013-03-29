@@ -3,6 +3,7 @@
 import os
 import subprocess
 import tempfile
+import concurrent.futures
 
 from urwid import MainLoop, ExitMainLoop, MonitoredList
 
@@ -14,7 +15,7 @@ from .config import (
 )
 from .ui import time_since
 from .events import on
-from .models import is_issue, is_pull_request
+from .models import is_issue, is_pull_request, is_open, is_closed
 
 NEW_ISSUE = """
 <!---
@@ -102,6 +103,82 @@ def item_index(issues, item):
         return -1
 
 
+def both(pred1, pred2):
+    return lambda x: pred1(x) and pred2(x)
+
+
+def step(first, last):
+    """Call ``first`` asynchronously, and then add ``last`` as a callback."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        future = executor.submit(first)
+        future.add_done_callback(last)
+
+
+class IssuesAndPullRequests(MonitoredList):
+    def __init__(self, repo):
+        self._issues = []
+        self._prs = []
+        self.repo = repo
+
+    def show_open_issues(self, **kwargs):
+        self._append_open_issues()
+        step(self.fetch_open_issues, self._append_open_issues)
+
+    def hide_open_issues(self, **kwargs):
+        # FIXME: on github3.py 0.6.0
+        for i in filter(both(is_issue, is_open), self[:]):
+            index = item_index(self, i)
+            self.pop(index)
+
+    def show_closed_issues(self, **kwargs):
+        self._append_closed_issues()
+        step(self.fetch_closed_issues, self._append_closed_issues)
+
+    def hide_closed_issues(self, **kwargs):
+        for i in filter(both(is_issue, is_closed), self[:]):
+            index = item_index(self, i)
+            self.pop(index)
+
+    def show_open_pull_requests(self, **kwargs):
+        self._append_open_pull_requests()
+        step(self.fetch_open_pull_requests, self._append_open_pull_requests)
+
+    def hide_open_pull_requests(self, **kwargs):
+        for pr in filter(both(is_pull_request, is_open), self[:]):
+            index = item_index(self, pr)
+            self.pop(index)
+
+    def fetch_open_pull_requests(self):
+        self._prs.extend([i for i in self.repo.iter_pulls()])
+
+    def fetch_open_issues(self):
+        self._issues.extend([i for i in self.repo.iter_issues()])
+
+    def fetch_closed_issues(self):
+        self._issues.extend([i for i in self.repo.iter_issues(state='closed')])
+
+    def _append_open_issues(self, future=None):
+        # FIXME: __eq__ is coming
+        for i in filter(is_open, self._issues):
+            index = item_index(self, i)
+            if index == -1:
+                self.append(i)
+
+    def _append_closed_issues(self, future=None):
+        # FIXME: __eq__ is coming
+        for i in filter(is_closed, self._issues):
+            index = item_index(self, i)
+            if index == -1:
+                self.append(i)
+
+    def _append_open_pull_requests(self, future=None):
+        # FIXME: __eq__ is coming
+        for pr in filter(is_open, self._prs):
+            index = item_index(self, pr)
+            if index == -1:
+                self.append(pr)
+
+
 class Shipit():
     ISSUE_LIST = 0
     ISSUE_DETAIL = 1
@@ -111,21 +188,19 @@ class Shipit():
         self.ui = ui
         self.repo = repo
 
-        self.issue_and_pr_list = MonitoredList()
-        self.issue_and_pr_list.set_modified_callback(self.on_modify_issue_and_pr_list)
-        for i in self.repo.iter_issues():
-            # TODO: take controls into account (open,closed,pr)
-            self.issue_and_pr_list.append(i)
+        self.issues_and_prs = IssuesAndPullRequests(self.repo)
+        self.issues_and_prs.set_modified_callback(self.on_modify_issues_and_prs)
+        self.issues_and_prs.show_open_issues()
 
         # Event handlers
-        on('show_open_issues', self.show_open_issues)
-        on('hide_open_issues', self.hide_open_issues)
+        on("show_open_issues", self.issues_and_prs.show_open_issues)
+        on("hide_open_issues", self.issues_and_prs.hide_open_issues)
 
-        on('show_closed_issues', self.show_closed_issues)
-        on('hide_closed_issues', self.hide_closed_issues)
+        on("show_closed_issues", self.issues_and_prs.show_closed_issues)
+        on("hide_closed_issues", self.issues_and_prs.hide_closed_issues)
 
-        on('show_open_pull_requests', self.show_open_pull_requests)
-        on('hide_open_pull_requests', self.hide_open_pull_requests)
+        on("show_open_pull_requests", self.issues_and_prs.show_open_pull_requests)
+        on("hide_open_pull_requests", self.issues_and_prs.hide_open_pull_requests)
 
     def start(self):
         self.issue_list()
@@ -136,12 +211,12 @@ class Shipit():
                              unhandled_input=self.handle_keypress)
         self.loop.run()
 
-    def on_modify_issue_and_pr_list(self):
-        self.ui.issues_and_pulls(self.issue_and_pr_list)
+    def on_modify_issues_and_prs(self):
+        self.ui.issues_and_pulls(self.issues_and_prs)
 
     def issue_list(self):
         self.mode = self.ISSUE_LIST
-        self.ui.issues_and_pulls(self.issue_and_pr_list)
+        self.ui.issues_and_pulls(self.issues_and_prs)
 
     def issue_detail(self, issue):
         self.mode = self.ISSUE_DETAIL
@@ -150,36 +225,6 @@ class Shipit():
     def pull_request_detail(self, pr):
         self.mode = self.PR_DETAIL
         self.ui.pull_request(pr)
-
-    def show_open_issues(self, **kwargs):
-        for i in self.repo.iter_issues():
-            self.issue_and_pr_list.append(i)
-
-    def hide_open_issues(self, **kwargs):
-        for i in filter(is_issue, self.issue_and_pr_list[:]):
-            if i.state == 'open':
-                index = item_index(self.issue_and_pr_list, i)
-                self.issue_and_pr_list.pop(index)
-
-    def show_closed_issues(self, **kwargs):
-        for i in self.repo.iter_issues(state='closed'):
-            self.issue_and_pr_list.append(i)
-
-    def hide_closed_issues(self, **kwargs):
-        for i in filter(is_issue, self.issue_and_pr_list[:]):
-            if i.state == 'closed':
-                index = item_index(self.issue_and_pr_list, i)
-                self.issue_and_pr_list.pop(index)
-
-    def show_open_pull_requests(self, **kwargs):
-        for pr in self.repo.iter_pulls():
-            self.issue_and_pr_list.append(pr)
-
-    def hide_open_pull_requests(self, **kwargs):
-        for i in filter(is_pull_request, self.issue_and_pr_list[:]):
-            if i.state == 'open':
-                index = item_index(self.issue_and_pr_list, i)
-                self.issue_and_pr_list.pop(index)
 
     def handle_keypress(self, key):
         #  R: reopen
@@ -207,8 +252,10 @@ class Shipit():
 
             if issue:
                 issue.close()
-
-            self.issue_list()
+                i = item_index(self.issues_and_prs, issue)
+                if i != -1:
+                    # FIXME: comparison is coming, until then...
+                    self.issues_and_prs.pop(i)
         elif key == KEY_BACK:
             if self.mode in [self.ISSUE_DETAIL, self.PR_DETAIL]:
                 self.issue_list()
