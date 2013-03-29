@@ -10,8 +10,8 @@ from urwid import MainLoop, ExitMainLoop, MonitoredList
 from .config import (
     PALETTE,
 
-    KEY_NEW_ISSUE, KEY_CLOSE_ISSUE, KEY_BACK, KEY_DETAIL, KEY_EDIT,
-    KEY_COMMENT, KEY_DIFF, KEY_QUIT,
+    KEY_OPEN_ISSUE, KEY_CLOSE_ISSUE, KEY_BACK, KEY_DETAIL, KEY_EDIT,
+    KEY_REOPEN_ISSUE, KEY_COMMENT, KEY_DIFF, KEY_QUIT,
 )
 from .ui import time_since
 from .events import on
@@ -90,34 +90,21 @@ class IssuesAndPullRequests(MonitoredList):
         self.repo = repo
 
     def show_open_issues(self, **kwargs):
+        del self[:]
         self._append_open_issues()
         step(self.fetch_open_issues, self._append_open_issues)
 
-    def hide_open_issues(self, **kwargs):
-        # FIXME: on github3.py 0.6.0
-        for i in filter(both(is_issue, is_open), self[:]):
-            index = item_index(self, i)
-            self.pop(index)
-
     def show_closed_issues(self, **kwargs):
+        del self[:]
         self._append_closed_issues()
         step(self.fetch_closed_issues, self._append_closed_issues)
 
-    def hide_closed_issues(self, **kwargs):
-        for i in filter(both(is_issue, is_closed), self[:]):
-            index = item_index(self, i)
-            self.pop(index)
+    def show_pull_requests(self, **kwargs):
+        del self[:]
+        self._append_pull_requests()
+        step(self.fetch_pull_requests, self._append_pull_requests)
 
-    def show_open_pull_requests(self, **kwargs):
-        self._append_open_pull_requests()
-        step(self.fetch_open_pull_requests, self._append_open_pull_requests)
-
-    def hide_open_pull_requests(self, **kwargs):
-        for pr in filter(both(is_pull_request, is_open), self[:]):
-            index = item_index(self, pr)
-            self.pop(index)
-
-    def fetch_open_pull_requests(self):
+    def fetch_pull_requests(self):
         self._prs.extend([i for i in self.repo.iter_pulls()])
 
     def fetch_open_issues(self):
@@ -140,7 +127,7 @@ class IssuesAndPullRequests(MonitoredList):
             if index == -1:
                 self.append(i)
 
-    def _append_open_pull_requests(self, future=None):
+    def _append_pull_requests(self, future=None):
         # FIXME: __eq__ is coming
         for pr in self._prs:
             index = item_index(self, pr)
@@ -161,17 +148,11 @@ class Shipit():
         self.issues_and_prs = IssuesAndPullRequests(self.repo)
         self.issues_and_prs.set_modified_callback(self.on_modify_issues_and_prs)
         self.issues_and_prs.show_open_issues()
-        self.issues_and_prs.show_open_pull_requests()
 
         # Event handlers
         on("show_open_issues", self.issues_and_prs.show_open_issues)
-        on("hide_open_issues", self.issues_and_prs.hide_open_issues)
-
         on("show_closed_issues", self.issues_and_prs.show_closed_issues)
-        on("hide_closed_issues", self.issues_and_prs.hide_closed_issues)
-
-        on("show_open_pull_requests", self.issues_and_prs.show_open_pull_requests)
-        on("hide_open_pull_requests", self.issues_and_prs.hide_open_pull_requests)
+        on("show_pull_requests", self.issues_and_prs.show_pull_requests)
 
     def start(self):
         self.issue_list()
@@ -204,7 +185,7 @@ class Shipit():
     def handle_keypress(self, key):
         #  R: reopen
         #  D: delete
-        if key == KEY_NEW_ISSUE:
+        if key == KEY_OPEN_ISSUE:
             if self.mode is self.ISSUE_LIST:
                 issue_text = spawn_editor(NEW_ISSUE)
                 if issue_text is None:
@@ -225,12 +206,21 @@ class Shipit():
         elif key == KEY_CLOSE_ISSUE:
             issue = self.ui.get_issue()
 
-            if issue:
-                issue.close()
-                i = item_index(self.issues_and_prs, issue)
-                if i != -1:
-                    # FIXME: comparison is coming, until then...
-                    self.issues_and_prs.pop(i)
+            if not issue:
+                return
+
+            issue.close()
+
+            if self.mode is self.ISSUE_DETAIL:
+                self.issue_detail(issue)
+        elif key == KEY_REOPEN_ISSUE:
+            issue = self.ui.get_issue()
+
+            if issue and is_closed(issue):
+                issue.reopen()
+
+            if self.mode is self.ISSUE_DETAIL:
+                self.issue_detail(issue)
         elif key == KEY_BACK:
             if self.mode is self.PR_DIFF:
                 pr = self.ui.get_focused_item()

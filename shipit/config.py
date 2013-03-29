@@ -1,5 +1,6 @@
-KEY_NEW_ISSUE = "n"
+KEY_OPEN_ISSUE = "O"
 KEY_CLOSE_ISSUE = "C"
+KEY_REOPEN_ISSUE = "R"
 KEY_BACK = "esc"
 KEY_DETAIL = "enter"
 KEY_EDIT = "e"

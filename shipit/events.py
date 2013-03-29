@@ -7,13 +7,8 @@ Poor mans pub-sub mechanism.
 
 EVENTS = [
  'show_open_issues',
- 'hide_open_issues',
-
  'show_closed_issues',
- 'hide_closed_issues',
-
- 'show_open_pull_requests',
- 'hide_open_pull_requests',
+ 'show_pull_requests',
 ]
 
 

@@ -106,30 +106,6 @@ pr_title = issue_title
 pr_time = issue_time
 
 
-def trigger_show_open_issues():
-    trigger("show_open_issues")
-
-
-def trigger_show_closed_issues():
-    trigger("show_closed_issues")
-
-
-def trigger_show_open_pull_requests():
-    trigger("show_open_pull_requests")
-
-
-def trigger_hide_open_issues():
-    trigger("hide_open_issues")
-
-
-def trigger_hide_closed_issues():
-    trigger("hide_closed_issues")
-
-
-def trigger_hide_open_pull_requests():
-    trigger("hide_open_pull_requests")
-
-
 def timestamp_from_datetime(datetime):
     return timegm(datetime.utctimetuple())
 
@@ -470,10 +446,12 @@ class Controls(urwid.ListBox):
         controls = []
         # Open/Closed/Pull Request
         controls.append(Legend("Filter by state\n"))
-        controls.extend([OpenIssuesCheckbox(),
-                         ClosedIssuesCheckbox(),
-                         PullRequestsCheckbox()])
+        filters = []
+        controls.extend([OpenIssuesFilter(filters),
+                         ClosedIssuesFilter(filters),
+                         PullRequestsFilter(filters),])
         controls.append(br)
+
         # Labels
         labels = [LabelWidget(label) for label in self.repo.iter_labels()]
         labels.insert(0, Legend("Filter by label\n"))
@@ -495,49 +473,47 @@ class Legend(urwid.Text):
         return False
 
 
-class CheckBoxWrap(urwid.WidgetWrap):
-    # TODO: signals
-    def __init__(self, text_widget, state=False, check=None, uncheck=None):
-        self.check = check
-        self.uncheck = uncheck
-        checkbox = urwid.AttrMap(urwid.CheckBox(" ", state=state), "checkbox", "focus")
-        widget = urwid.Columns([(5, checkbox), text_widget])
+class RadioButtonWrap(urwid.WidgetWrap):
+    def __init__(self, filters, label, check=None):
+        self.chec = check
 
-        self.checkbox = checkbox.base_widget
-        urwid.connect_signal(self.checkbox, "change", self.on_change)
+        widget = urwid.RadioButton(filters, label)
+
+        urwid.connect_signal(widget, "change", self.on_change)
 
         super().__init__(widget)
 
 
     def on_change(self, checkbox, new_state):
-        if new_state and callable(self.check):
-            self.check()
-        elif callable(self.uncheck):
-            self.uncheck()
+        if new_state and callable(self.on_check):
+            self.on_check()
+
+    def on_check(self):
+        pass
 
 
-class OpenIssuesCheckbox(CheckBoxWrap):
-    def __init__(self, checked=True):
-        super().__init__(urwid.Text("Open"),
-                         state=checked,
-                         check=trigger_show_open_issues,
-                         uncheck=trigger_hide_open_issues)
+class OpenIssuesFilter(RadioButtonWrap):
+    def __init__(self, filters):
+        super().__init__(filters, "Open")
+
+    def on_check(self):
+        trigger("show_open_issues")
 
 
-class ClosedIssuesCheckbox(CheckBoxWrap):
-    def __init__(self, checked=False):
-        super().__init__(urwid.Text("Closed"),
-                         state=checked,
-                         check=trigger_show_closed_issues,
-                         uncheck=trigger_hide_closed_issues)
+class ClosedIssuesFilter(RadioButtonWrap):
+    def __init__(self, filters):
+        super().__init__(filters, "Closed")
+
+    def on_check(self):
+        trigger("show_closed_issues")
 
 
-class PullRequestsCheckbox(CheckBoxWrap):
-    def __init__(self, checked=True):
-        super().__init__(urwid.Text("Pull requests"),
-                         state=checked,
-                         check=trigger_show_open_pull_requests,
-                         uncheck=trigger_hide_open_pull_requests)
+class PullRequestsFilter(RadioButtonWrap):
+    def __init__(self, filters):
+        super().__init__(filters, "Pull Requests")
+
+    def on_check(self):
+        trigger("show_pull_requests")
 
 
 class LabelWidget(urwid.WidgetWrap):
