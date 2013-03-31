@@ -20,6 +20,8 @@ The available actions are:
 
 `c` comments on an issue or pull request.
 
+`e` for editing a issue or pull request text (soon for comments too).
+
 `return` shows the selected issue or pull request with more detail.
 
 `d` shows the diff when viewing a pull request in detail.
