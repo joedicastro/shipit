@@ -42,6 +42,8 @@ The available actions are:
 
 `esc` takes you back to the previous screen.
 
+`q` quits `shipit`.
+
 ## Installation
 
 If you downloaded the source code
