@@ -222,7 +222,7 @@ class Shipit():
             if issue is None:
                 return
 
-            title_and_body = '\n'.join([issue.title, issue.body_text])
+            title_and_body = '\n'.join([issue.title, issue.body])
             issue_text = self.spawn_editor(title_and_body)
 
             if issue_text is None:
