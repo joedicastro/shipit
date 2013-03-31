@@ -7,6 +7,20 @@ that can be used to manage your issues and pull requests.
 
 ## Usage
 
+You can specify the user and repository to see the issues from. If you omit the
+user it will be assumed it's you:
+
+    $ shipit alejandrogromez/turses
+
+    # or, if you are `alejandrogomez`
+
+    $ shipit turses
+
+If you are in a git repository with a GitHub remote, calling `shipit` without
+arguments will open the issues for such remote.
+
+    $ cd ~/repos/turses/ && shipit
+
 For the moment you'll have to navigate with the arrow keys, although I'll
 vimify it soon ☺
 
