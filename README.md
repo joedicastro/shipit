@@ -38,6 +38,8 @@ The available actions are:
 
 `return` shows the selected issue or pull request with more detail.
 
+`B` opens the URL of the focused item in the browser.
+
 `d` shows the diff when viewing a pull request in detail.
 
 `esc` takes you back to the previous screen.

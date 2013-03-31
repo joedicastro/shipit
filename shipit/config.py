@@ -7,6 +7,7 @@ KEY_EDIT = "e"
 KEY_COMMENT = "c"
 KEY_QUIT = "q"
 KEY_DIFF = "d"
+KEY_BROWSER = "B"
 
 DIVIDER = "─"
 

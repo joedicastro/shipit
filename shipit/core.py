@@ -5,6 +5,7 @@ import os
 import subprocess
 import tempfile
 import concurrent.futures
+import webbrowser
 
 from urwid import MainLoop, ExitMainLoop, MonitoredList
 
@@ -12,7 +13,7 @@ from .config import (
     PALETTE,
 
     KEY_OPEN_ISSUE, KEY_CLOSE_ISSUE, KEY_BACK, KEY_DETAIL, KEY_EDIT,
-    KEY_REOPEN_ISSUE, KEY_COMMENT, KEY_DIFF, KEY_QUIT,
+    KEY_REOPEN_ISSUE, KEY_COMMENT, KEY_DIFF, KEY_BROWSER, KEY_QUIT,
 )
 from .ui import time_since
 from .events import on
@@ -279,12 +280,16 @@ class Shipit():
             issue.create_comment(comment_text)
 
             self.issue_detail(issue)
-        elif key == KEY_QUIT:
-            raise ExitMainLoop
         elif key == KEY_DIFF:
             if self.mode is self.PR_DETAIL:
                 pr = self.ui.get_focused_item()
                 self.diff(pr)
+        elif key == KEY_BROWSER:
+            item = self.ui.get_focused_item()
+            if hasattr(item, '_api'):
+                webbrowser.open(item._api)
+        elif key == KEY_QUIT:
+            raise ExitMainLoop
 
     def spawn_editor(self, help_text=None):
         """
