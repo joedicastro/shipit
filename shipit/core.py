@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import re
 import os
 import subprocess
 import tempfile
@@ -25,35 +26,13 @@ the issue.
 -->
 """
 
+# '*?' is for a non-greedy matching strategy
+# re.DOTALL makes newlines part of the characters that `.` matches
+COMMENT_RE = re.compile('<!--.*?-->', re.DOTALL)
 
-def spawn_editor(help_text=None):
-    """
-    Open a editor with a temporary file containing ``help_text``.
+def strip_comments(text):
+    return COMMENT_RE.sub('', text.strip())
 
-    If the exit code is 0 the text from the file will be returned.
-
-    Otherwise, ``None`` is returned.
-    """
-    text = '' if help_text is None else help_text
-
-    tmp_file = tempfile.NamedTemporaryFile(mode='w+',
-                                           suffix='.markdown',
-                                           delete=False)
-    tmp_file.write(text)
-    tmp_file.close()
-
-    fname = tmp_file.name
-
-    return_code = subprocess.call([os.getenv('EDITOR', 'vim'), fname])
-    if return_code != 0:
-        return None
-
-    with open(fname, 'r') as f:
-        contents = f.read()
-
-    os.remove(fname)
-
-    return contents
 
 
 def format_comment(comment):
@@ -187,7 +166,8 @@ class Shipit():
         #  D: delete
         if key == KEY_OPEN_ISSUE:
             if self.mode is self.ISSUE_LIST:
-                issue_text = spawn_editor(NEW_ISSUE)
+                issue_text = self.spawn_editor(NEW_ISSUE)
+
                 if issue_text is None:
                     # TODO: cancelled by the user
                     return
@@ -201,6 +181,7 @@ class Shipit():
                 body = lines(body)
 
                 issue = self.repo.create_issue(title=title, body=body)
+
                 if issue:
                     self.issue_detail(issue)
         elif key == KEY_CLOSE_ISSUE:
@@ -242,7 +223,7 @@ class Shipit():
                 return
 
             title_and_body = '\n'.join([issue.title, issue.body_text])
-            issue_text = spawn_editor(title_and_body)
+            issue_text = self.spawn_editor(title_and_body)
 
             if issue_text is None:
                 # TODO: cancelled
@@ -274,16 +255,15 @@ class Shipit():
             issue_thread.insert(0, '<!---\n')
             issue_thread.append('-->')
 
-            comment_text = spawn_editor('\n'.join(issue_thread))
+            comment_text = self.spawn_editor('\n'.join(issue_thread))
 
             if comment_text is None:
                 # TODO: cancelled
-                return
+                return key
 
-            # TODO: strip comments first!
-            if not comment_text.strip():
-                # TODO: invalid input
-                return
+            if not comment_text:
+                # TODO: A empty comment is invalid input
+                return key
 
             issue.create_comment(comment_text)
 
@@ -294,3 +274,32 @@ class Shipit():
             if self.mode is self.PR_DETAIL:
                 pr = self.ui.get_focused_item()
                 self.diff(pr)
+
+    def spawn_editor(self, help_text=None):
+        """
+        Open a editor with a temporary file containing ``help_text``.
+
+        If the exit code is 0 the text from the file will be returned.
+
+        Otherwise, ``None`` is returned.
+        """
+        text = '' if help_text is None else help_text
+
+        tmp_file = tempfile.NamedTemporaryFile(mode='w+',
+                                            suffix='.markdown',
+                                            delete=False)
+        tmp_file.write(text)
+        tmp_file.close()
+
+        fname = tmp_file.name
+
+        return_code = subprocess.call([os.getenv('EDITOR', 'vim'), fname])
+
+        if return_code == 0:
+            with open(fname, 'r') as f:
+                contents = f.read()
+
+        if return_code != 0:
+            return None
+        else:
+            return strip_comments(contents)
