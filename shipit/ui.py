@@ -6,10 +6,11 @@ from calendar import timegm
 import urwid
 from x256 import x256
 
-from .config import ISSUE_DIVIDER, COMMENT_DIVIDER
+from .config import DIVIDER
 from .events import trigger
 from .models import is_issue, is_pull_request, is_open
 from .func import unlines
+
 
 def issue_title(issue):
     return urwid.Text([("title", issue.title)])
@@ -152,7 +153,7 @@ def box(widget):
 
 
 def make_divider():
-    return urwid.AttrMap(urwid.Divider(ISSUE_DIVIDER), "divider")
+    return urwid.AttrMap(urwid.Divider(DIVIDER), "divider")
 
 
 def make_vertical_divider():

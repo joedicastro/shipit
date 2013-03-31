@@ -8,8 +8,7 @@ KEY_COMMENT = "c"
 KEY_QUIT = "q"
 KEY_DIFF = "d"
 
-ISSUE_DIVIDER = "─"
-COMMENT_DIVIDER = "─"
+DIVIDER = "─"
 
 PALETTE = [
     ("header",    "light blue",      ""),
