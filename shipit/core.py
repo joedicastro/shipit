@@ -309,7 +309,11 @@ class Shipit():
 
         fname = tmp_file.name
 
+        self.loop.screen.stop()
+
         return_code = subprocess.call([os.getenv('EDITOR', 'vim'), fname])
+
+        self.loop.screen.start()
 
         if return_code == 0:
             with open(fname, 'r') as f:
