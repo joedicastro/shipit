@@ -364,7 +364,9 @@ def issue_detail(issue):
     info = urwid.ListBox(urwid.SimpleListWalker(info_widgets))
     vertical_divider = make_vertical_divider()
 
-    widget = urwid.Columns([(110, thread), (3, vertical_divider), info])
+    widget = urwid.Columns([('weight', 0.8, thread),
+                            (3, vertical_divider),
+                            ('weight', 0.2, info)])
 
     return widget
 
@@ -395,7 +397,9 @@ def pull_request_detail(pr):
 
     vertical_divider = make_vertical_divider()
 
-    widget = urwid.Columns([(110, thread), (3, vertical_divider), info])
+    widget = urwid.Columns([('weight', 0.8, thread),
+                            (3, vertical_divider),
+                            ('weight', 0.2, info)])
 
     return widget
 
@@ -420,9 +424,9 @@ class ListWidget(urwid.Columns):
         vertical_divider = make_vertical_divider()
         self.controls = Controls(repo, items)
 
-        super().__init__([(90, self.issues),
+        super().__init__([('weight', 0.8, self.issues),
                           (3, vertical_divider),
-                          self.controls])
+                          ('weight', 0.2, self.controls),])
 
     def reset_list(self, items):
         widgets = [w for w in issue_list(items)]
