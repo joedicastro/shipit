@@ -62,6 +62,12 @@ def step(first, last):
         future.add_done_callback(last)
 
 
+def discard_args(func):
+    def wrapper(*args, **kwargs):
+        return func()
+    return wrapper
+
+
 class IssuesAndPullRequests(MonitoredList):
     def __init__(self, repo):
         self._issues = []
@@ -134,12 +140,11 @@ class Shipit():
         on("show_pull_requests", self.issues_and_prs.show_pull_requests)
 
     def start(self):
-        self.issue_list()
-
         self.loop = MainLoop(self.ui,
                              PALETTE,
                              handle_mouse=True,
                              unhandled_input=self.handle_keypress)
+        self.loop.set_alarm_at(0, discard_args(self.issue_list))
         self.loop.run()
 
     def on_modify_issues_and_prs(self):
@@ -148,18 +153,22 @@ class Shipit():
     def issue_list(self):
         self.mode = self.ISSUE_LIST
         self.ui.issues_and_pulls(self.issues_and_prs)
+        self.loop.draw_screen()
 
     def issue_detail(self, issue):
         self.mode = self.ISSUE_DETAIL
         self.ui.issue(issue)
+        self.loop.draw_screen()
 
     def pull_request_detail(self, pr):
         self.mode = self.PR_DETAIL
         self.ui.pull_request(pr)
+        self.loop.draw_screen()
 
     def diff(self, pr):
         self.mode = self.PR_DIFF
         self.ui.diff(pr)
+        self.loop.draw_screen()
 
     def handle_keypress(self, key):
         #  R: reopen
@@ -184,6 +193,8 @@ class Shipit():
 
                 if issue:
                     self.issue_detail(issue)
+                else:
+                    self.issue_list()
         elif key == KEY_CLOSE_ISSUE:
             issue = self.ui.get_issue()
 
