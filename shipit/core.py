@@ -287,7 +287,7 @@ class Shipit():
         elif key == KEY_BROWSER:
             item = self.ui.get_focused_item()
             if hasattr(item, '_api'):
-                webbrowser.open(item._api)
+                webbrowser.open(item.html_url)
         elif key == KEY_QUIT:
             raise ExitMainLoop
 
